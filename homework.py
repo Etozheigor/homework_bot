@@ -1,20 +1,21 @@
-from msilib.schema import Error
+from http import HTTPStatus
+from telnetlib import EC
 import time
 import logging
 import os
+import sys
 import requests
-from telegram import ReplyKeyboardMarkup, Bot
-from telegram.ext import CommandHandler, Filters, MessageHandler, Updater
+from telegram import  Bot
 from dotenv import load_dotenv
-
 load_dotenv()
+
 
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 6
+RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -24,6 +25,21 @@ HOMEWORK_STATUSES = {
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename='homework_bot.log', 
+    format='%(asctime)s, %(levelname)s, %(message)s'
+)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(handler)
+formatter = logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s'
+)
+handler.setFormatter(formatter)
 
 
 def send_message(bot, message):
@@ -35,22 +51,27 @@ def get_api_answer(current_timestamp):
     params = {'from_date': timestamp}
 
     response = requests.get(url=ENDPOINT, headers=HEADERS, params=params)
+    if response.status_code != HTTPStatus.OK:
+        raise Exception('Ошибка статуса')
+    
     return response.json()
 
 
 def check_response(response):
 
-    try:
-        return response.get('homeworks')
-    except len(response.get('homeworks')) < 1: 
-        raise TypeError
-    except type(response) != dict:
-        raise TypeError
-    except type(response.get('homeworks')) != list:
-        raise TypeError
-    
+    if response['homeworks'] is None:
+        raise Exception('отсутствует ключ homeworks')
+
+    if type(response) != dict:
+        raise Exception('Ответ не в формате словаря')
+       
+    elif len(response.keys()) == 0:  
+        raise Exception('Сервер венул пустой ответ')
+
+    elif type(response['homeworks']) != list:
+        raise Exception('Работы приходят не в виде списка')
         
-    
+    return response.get('homeworks')
 
 
 def parse_status(homework):
@@ -64,23 +85,28 @@ def parse_status(homework):
 
 
 def check_tokens():
-    if (os.getenv(PRACTICUM_TOKEN) and os.getenv(TELEGRAM_TOKEN) and os.getenv(TELEGRAM_CHAT_ID)) is not None:
-        return True
-    return False
+    if PRACTICUM_TOKEN is None:
+        return False
+    elif TELEGRAM_TOKEN is None:
+        return False
+    elif TELEGRAM_CHAT_ID is None:
+        return False
+    return True
 
 def main():
     """Основная логика работы бота."""
     bot = Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time())
+    current_timestamp = 0
     
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            if check_response(response) is not None:
-                message = parse_status(check_response(response)[0])
+            homeworks = check_response(response)
+            if homeworks:
+                message = parse_status(homeworks[0])
                 send_message(bot, message)
-            current_timestamp = response.get('current_date')
-            time.sleep(RETRY_TIME)
+                current_timestamp = response.get('current_date')
+                time.sleep(RETRY_TIME)
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'

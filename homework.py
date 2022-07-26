@@ -2,7 +2,6 @@ from http import HTTPStatus
 import time
 import logging
 import os
-import sys
 import requests
 from telegram import Bot
 from dotenv import load_dotenv
@@ -23,8 +22,10 @@ HOMEWORK_STATUSES = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
+
 class ColorFilter(logging.Filter):
     """Кастомыный класс для выделения сообщений разным цветом"""
+
     COLOR = {
         "DEBUG": "GREEN",
         "INFO": "BLUE",
@@ -53,15 +54,16 @@ logger.addFilter(ColorFilter())
 
 logging.basicConfig(
     level=logging.DEBUG,
-    handlers = [handler],
+    handlers=[handler],
     format='%(asctime)s, %(levelname)s, %(message)s'
 )
+
 
 def send_message(bot, message):
     """Отправляет сообщение с заданным текстом в чат Телеграм"""
     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     logging.info(f'Сообщение "{message}" успешно отправлено')
-    
+
 
 def get_api_answer(current_timestamp):
     """Возвращает ответ от сервера в виде словаря"""
@@ -75,29 +77,29 @@ def get_api_answer(current_timestamp):
 
 
 def check_response(response):
-    "Проверяет полученный ответ от сервера на корректность"
+    """Проверяет полученный ответ от сервера на корректность"""
     if response['homeworks'] is None:
         logging.exception('отсутствует ключ homeworks')
-        raise Exception('отсутствует ключ homeworks')  
+        raise Exception('отсутствует ключ homeworks')
     if type(response) != dict:
         raise Exception('Ответ не в формате словаря')
-    elif len(response.keys()) == 0:  
+    elif len(response.keys()) == 0:
         raise Exception('Сервер венул пустой ответ')
     elif type(response['homeworks']) != list:
-        raise Exception('Работы приходят не в виде списка') 
+        raise Exception('Работы приходят не в виде списка')
     return response.get('homeworks')
 
 
 def parse_status(homework):
-    "Определяет статус проверки домашней работы, возвращает сообщение об этом"
+    """Определяет статус домашней работы, возвращает сообщение об этом"""
     homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
     if homework_name is None:
-        logging.exception('отсутствует ключ homework_name') 
+        logging.exception('отсутствует ключ homework_name')
     elif 'status' not in homework.keys():
         logging.exception('Отсутстует ключ status')
     elif homework_status not in HOMEWORK_STATUSES.keys():
-        logging.exception('Недокументированный статус домашней работы')  
+        logging.exception('Недокументированный статус домашней работы')
     verdict = HOMEWORK_STATUSES[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -114,6 +116,7 @@ def check_tokens():
         logging.critical('Отсутствует ID чата в переменных окружения')
         return False
     return True
+
 
 def main():
     """Основная логика работы бота."""
@@ -133,7 +136,7 @@ def main():
                 time.sleep(RETRY_TIME)
             except Exception as error:
                 message = f'Сбой в работе программы: {error}'
-                logging.exception(f'Сообщение не отправлено. Сбой в работе программы: {error}')
+                logging.exception(f'Сбой в работе программы: {error}')
                 send_message(bot, message)
                 time.sleep(RETRY_TIME)
 

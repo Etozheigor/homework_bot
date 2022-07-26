@@ -24,7 +24,7 @@ HOMEWORK_STATUSES = {
 
 
 class ColorFilter(logging.Filter):
-    """Кастомыный класс для выделения сообщений разным цветом"""
+    """Кастомыный класс для выделения сообщений разным цветом."""
 
     COLOR = {
         "DEBUG": "GREEN",
@@ -35,6 +35,7 @@ class ColorFilter(logging.Filter):
     }
 
     def filter(self, record):
+        """Устанавливает цвет сообщения."""
         record.color = ColorFilter.COLOR[record.levelname]
         return True
 
@@ -60,13 +61,13 @@ logging.basicConfig(
 
 
 def send_message(bot, message):
-    """Отправляет сообщение с заданным текстом в чат Телеграм"""
+    """Отправляет сообщение с заданным текстом в чат Телеграм."""
     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     logging.info(f'Сообщение "{message}" успешно отправлено')
 
 
 def get_api_answer(current_timestamp):
-    """Возвращает ответ от сервера в виде словаря"""
+    """Возвращает ответ от сервера в виде словаря."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     response = requests.get(url=ENDPOINT, headers=HEADERS, params=params)
@@ -77,7 +78,7 @@ def get_api_answer(current_timestamp):
 
 
 def check_response(response):
-    """Проверяет полученный ответ от сервера на корректность"""
+    """Проверяет полученный ответ от сервера на корректность."""
     if response['homeworks'] is None:
         logging.exception('отсутствует ключ homeworks')
         raise Exception('отсутствует ключ homeworks')
@@ -91,7 +92,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Определяет статус домашней работы, возвращает сообщение об этом"""
+    """Определяет статус домашней работы, возвращает сообщение об этом."""
     homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
     if homework_name is None:
@@ -105,7 +106,7 @@ def parse_status(homework):
 
 
 def check_tokens():
-    """Проверяет наличие необходимых токенов в переменных окружения"""
+    """Проверяет наличие необходимых токенов в переменных окружения."""
     if PRACTICUM_TOKEN is None:
         logging.critical('Отсутствует токен Практикума в переменных окружения')
         return False

@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 from telegram import Bot
 
-from exceptions import DontSendException
+from exceptions import DontSendException, StatusNot200Exception
 
 load_dotenv()
 
@@ -77,29 +77,21 @@ def send_message(bot: Bot, message: str) -> None:
 
 def get_api_answer(current_timestamp: int) -> dict:
     """Возвращает ответ от сервера в виде словаря."""
-    # timestamp = current_timestamp or int(time.time())
-    # params = {'from_date': timestamp}
-    # try:
-    #     response = requests.get(url=ENDPOINT, headers=HEADERS, params=params)
-    #     logging.info('Начало запроса к API')
-    #     logging.debug('Параметры запроса к API:'
-    #                   f'url={ENDPOINT}, headers={HEADERS}, params={params}')
-    #     if response.status_code != HTTPStatus.OK:
-    #         raise Exception('Ошибка ответа сервера')
-    # except Exception:
-    #     return None
-    # else:
-    #     return response.json()
-
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    response = requests.get(url=ENDPOINT, headers=HEADERS, params=params)
-    if response.status_code != HTTPStatus.OK:
-        logging.exception('Ошибка ответа сервера')
+    try:
+        response = requests.get(url=ENDPOINT, headers=HEADERS, params=params)
+        logging.info('Начало запроса к API')
         logging.debug('Параметры запроса к API:'
                       f'url={ENDPOINT}, headers={HEADERS}, params={params}')
-        raise Exception('Ошибка ответа сервера')
-    return response.json()
+        if response.status_code != HTTPStatus.OK:
+            raise StatusNot200Exception('Статус ответа сервера не 200')
+    except StatusNot200Exception:
+        raise StatusNot200Exception('Статус ответа сервера не 200')
+    except Exception:
+        raise Exception('Cбой при запросе к эндпоинту')
+    else:
+        return response.json()
 
 
 def check_response(response: dict) -> list:
@@ -158,7 +150,7 @@ def main() -> None:
                 logging.debug('Нет новых статусов работы')
         except DontSendException as error:
             logging.exception(f'Сбой в работе программы: {error}')
-        except Exception as error:
+        except (StatusNot200Exception, Exception) as error:
             message = f'Сбой в работе программы: {error}'
             logging.exception(f'Сбой в работе программы: {error}')
             send_message(bot, message)

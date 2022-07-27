@@ -131,7 +131,7 @@ def main() -> None:
             response = get_api_answer(current_timestamp)
             logging.debug('Параметры запроса к API:'
                           f'url={ENDPOINT}, headers={HEADERS},'
-                          f'params={get_api_answer.params}')
+                          f'params={{"from_date": timestamp}}')
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])

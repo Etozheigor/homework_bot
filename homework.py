@@ -5,8 +5,8 @@ import time
 from http import HTTPStatus
 
 import requests
+import telegram
 from dotenv import load_dotenv
-from telegram import Bot
 
 from exceptions import DontSendException, StatusNot200Exception
 
@@ -46,33 +46,23 @@ class ColorFilter(logging.Filter):
 
 
 logger = logging.getLogger(__name__)
-handler = logging.FileHandler(
-    filename='homework_bot.log',
-    encoding='utf-8')
-formatter = logging.Formatter(
-    '%(asctime)s - %(levelname)s - %(message)s')
-logger.addFilter(ColorFilter())
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(formatter)
-logger.addHandler(stream_handler)
 logging.basicConfig(
     level=logging.DEBUG,
-    handlers=[handler],
+    handlers=[
+        logging.FileHandler(filename='homework_bot.log',
+                            encoding='utf-8'),
+        logging.StreamHandler()],
     format='%(asctime)s, %(levelname)s, %(message)s'
 )
 
 
-def send_message(bot: Bot, message: str) -> None:
+def send_message(bot: telegram.Bot, message: str) -> None:
     """Отправляет сообщение с заданным текстом в чат Телеграм."""
     try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logging.info(f'Начата отправка сообщения "{message}"')
-    except Exception:
-        new_message = 'Сбой при отправке сообщения'
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=new_message)
-        logging.info(f'Начата отправка сообщения "{new_message}"')
-    else:
-        logging.info(f'Успешно отправлено сообщение: "{new_message}"')
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    except telegram.error.TelegramError:
+        raise telegram.error.TelegramError
 
 
 def get_api_answer(current_timestamp: int) -> dict:
@@ -80,10 +70,8 @@ def get_api_answer(current_timestamp: int) -> dict:
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
-        response = requests.get(url=ENDPOINT, headers=HEADERS, params=params)
         logging.info('Начало запроса к API')
-        logging.debug('Параметры запроса к API:'
-                      f'url={ENDPOINT}, headers={HEADERS}, params={params}')
+        response = requests.get(url=ENDPOINT, headers=HEADERS, params=params)
         if response.status_code != HTTPStatus.OK:
             raise StatusNot200Exception('Статус ответа сервера не 200')
     except StatusNot200Exception:
@@ -96,14 +84,16 @@ def get_api_answer(current_timestamp: int) -> dict:
 
 def check_response(response: dict) -> list:
     """Проверяет полученный ответ от сервера на корректность."""
-    if response['homeworks'] is None:
-        logging.exception('отсутствует ключ homeworks')
-        raise Exception('отсутствует ключ homeworks')
+    if response['current_date'] is None:
+        raise Exception('отсутствует ключ current_date')
     if not isinstance(response, dict):
         raise DontSendException('Ответ не в формате словаря')
-    elif len(response.keys()) == 0:
+    else:
+        if response.get('homeworks') is None:
+            raise Exception('отсутствует ключ homeworks')
+    if len(response.keys()) == 0:
         raise DontSendException('Сервер венул пустой ответ')
-    elif not isinstance(response['homeworks'], list):
+    if not isinstance(response['homeworks'], list):
         raise DontSendException('Работы приходят не в виде списка')
     return response.get('homeworks')
 
@@ -124,27 +114,29 @@ def parse_status(homework: list) -> dict:
 
 def check_tokens() -> bool:
     """Проверяет наличие необходимых токенов в переменных окружения."""
-    tokens_list = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
-    if all([x is not None for x in tokens_list]):
-        return True
-    else:
-        return False
+    tokens_list = (PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,)
+    return all(tokens_list)
 
 
 def main() -> None:
     """Основная логика работы бота."""
-    bot = Bot(token=TELEGRAM_TOKEN)
+    bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     if not check_tokens():
-        logging.critical('Отсутствует нужный токен в переменных окружения')
-        sys.exit('Отсутствует нужный токен в переменных окружения')
+        no_tokens_message = 'Отсутствует нужный токен в переменных окружения'
+        logging.critical(no_tokens_message)
+        sys.exit(no_tokens_message)
     while True:
         try:
             response = get_api_answer(current_timestamp)
+            logging.debug('Параметры запроса к API:'
+                          f'url={ENDPOINT}, headers={HEADERS},'
+                          f'params={get_api_answer.params}')
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])
                 send_message(bot, message)
+                logging.info(f'Успешно отправлено сообщение: "{message}"')
                 current_timestamp = response.get('current_date')
             else:
                 logging.debug('Нет новых статусов работы')

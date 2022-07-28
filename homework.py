@@ -62,7 +62,9 @@ def send_message(bot: telegram.Bot, message: str) -> None:
         logging.info(f'Начата отправка сообщения "{message}"')
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except telegram.error.TelegramError:
-        raise telegram.error.TelegramError
+        raise DontSendException
+    else:
+        logging.info(f'Успешно отправлено сообщение {message}')
 
 
 def get_api_answer(current_timestamp: int) -> dict:
@@ -73,29 +75,37 @@ def get_api_answer(current_timestamp: int) -> dict:
         logging.info('Начало запроса к API')
         response = requests.get(url=ENDPOINT, headers=HEADERS, params=params)
         if response.status_code != HTTPStatus.OK:
+            logging.debug('Параметры запроса к API:'
+                          f'url={ENDPOINT}, headers={HEADERS},'
+                          f'params={params}')
             raise StatusNot200Exception('Статус ответа сервера не 200')
-    except StatusNot200Exception:
-        raise StatusNot200Exception('Статус ответа сервера не 200')
     except Exception:
-        raise Exception('Cбой при запросе к эндпоинту')
+        logging.debug('Параметры запроса к API:'
+                      f'response.status_code={response.status_code},'
+                      f'response_reason={response.reason},'
+                      f'response.text={response.text},'
+                      f'url={ENDPOINT},'
+                      f'headers={HEADERS},'
+                      f'params={params}.')
+        raise Exception('Неизвесная ошибка при запросе к эндпоинту')
+
     else:
         return response.json()
 
 
 def check_response(response: dict) -> list:
     """Проверяет полученный ответ от сервера на корректность."""
-    if response['current_date'] is None:
-        raise Exception('отсутствует ключ current_date')
+    logging.debug('Начало проверки ответа от сервера')
     if not isinstance(response, dict):
-        raise DontSendException('Ответ не в формате словаря')
-    else:
-        if response.get('homeworks') is None:
-            raise Exception('отсутствует ключ homeworks')
-    if len(response.keys()) == 0:
-        raise DontSendException('Сервер венул пустой ответ')
+        raise TypeError('Ответ не в формате словаря')
+    homeworks_list = response.get('homeworks')
+    if homeworks_list is None:
+        raise Exception('отсутствует ключ homeworks')
+    if response.get('current_date') is None:
+        raise Exception('отсутствует ключ current_date')
     if not isinstance(response['homeworks'], list):
         raise DontSendException('Работы приходят не в виде списка')
-    return response.get('homeworks')
+    return homeworks_list
 
 
 def parse_status(homework: list) -> dict:
@@ -104,7 +114,7 @@ def parse_status(homework: list) -> dict:
     homework_status = homework.get('status')
     if homework_name is None:
         raise KeyError('В словаре отсутствует ключ homeworl_name')
-    elif 'status' not in homework.keys():
+    elif homework_status is None:
         raise KeyError('В словаре отсутствует ключ status')
     elif homework_status not in HOMEWORK_STATUSES.keys():
         raise ValueError('Недокументированный статус домашней работы')
@@ -129,9 +139,6 @@ def main() -> None:
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            logging.debug('Параметры запроса к API:'
-                          f'url={ENDPOINT}, headers={HEADERS},'
-                          f'params={{"from_date": timestamp}}')
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])
@@ -142,7 +149,7 @@ def main() -> None:
                 logging.debug('Нет новых статусов работы')
         except DontSendException as error:
             logging.exception(f'Сбой в работе программы: {error}')
-        except (StatusNot200Exception, Exception) as error:
+        except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logging.exception(f'Сбой в работе программы: {error}')
             send_message(bot, message)

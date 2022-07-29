@@ -62,7 +62,7 @@ def send_message(bot: telegram.Bot, message: str) -> None:
         logging.info(f'Начата отправка сообщения "{message}"')
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except telegram.error.TelegramError:
-        raise DontSendException
+        raise DontSendException('Произошла ошибка при отправке сообщения')
     else:
         logging.info(f'Успешно отправлено сообщение {message}')
 
@@ -75,19 +75,21 @@ def get_api_answer(current_timestamp: int) -> dict:
         logging.info('Начало запроса к API')
         response = requests.get(url=ENDPOINT, headers=HEADERS, params=params)
         if response.status_code != HTTPStatus.OK:
-            logging.debug('Параметры запроса к API:'
-                          f'url={ENDPOINT}, headers={HEADERS},'
-                          f'params={params}')
-            raise StatusNot200Exception('Статус ответа сервера не 200')
+            raise StatusNot200Exception(
+                'Статус ответа сервера не 200.'
+                'Параметры запроса к API:'
+                f'url={ENDPOINT}, headers={HEADERS},'
+                f'params={params}')
     except Exception:
-        logging.debug('Параметры запроса к API:'
-                      f'response.status_code={response.status_code},'
-                      f'response_reason={response.reason},'
-                      f'response.text={response.text},'
-                      f'url={ENDPOINT},'
-                      f'headers={HEADERS},'
-                      f'params={params}.')
-        raise Exception('Неизвесная ошибка при запросе к эндпоинту')
+        raise Exception(
+            'Неизвесная ошибка при запросе к эндпоинту'
+            'Параметры запроса к API:'
+            f'response.status_code={response.status_code},'
+            f'response_reason={response.reason},'
+            f'response.text={response.text},'
+            f'url={ENDPOINT},'
+            f'headers={HEADERS},'
+            f'params={params}.')
 
     else:
         return response.json()
@@ -103,7 +105,7 @@ def check_response(response: dict) -> list:
         raise Exception('отсутствует ключ homeworks')
     if response.get('current_date') is None:
         raise Exception('отсутствует ключ current_date')
-    if not isinstance(response['homeworks'], list):
+    if not isinstance(homeworks_list, list):
         raise DontSendException('Работы приходят не в виде списка')
     return homeworks_list
 
